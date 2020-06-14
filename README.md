@@ -1,7 +1,6 @@
 # Encrypted Message Passing
 
-[![Build Status](https://travis-ci.org/SamuelSchlesinger/encrypted-message-cli.svg?branch=master)](https://travis-ci.org/SamuelSchlesinger/encrypted-message-cli)
+[![Build Status](https://travis-ci.org/SamuelSchlesinger/encrypted-message-server.svg?branch=master)](https://travis-ci.org/SamuelSchlesinger/encrypted-message-server)
 
-This is a small command line tool to generate RSA keypairs and encrypt and
-decrypt messages using those keypairs.
-
+A simple server for multiple parties to securely share messages over an
+insecure connection.
