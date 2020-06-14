@@ -1,0 +1,62 @@
+cabal-version:       >=1.10
+
+name:                encrypted-messaging
+version:             0.1.0.0
+-- synopsis:
+-- description:
+-- bug-reports:
+-- license:
+license-file:        LICENSE
+author:              Samuel Schlesinger
+maintainer:          samuel@simspace.com
+-- copyright:
+-- category:
+build-type:          Simple
+extra-source-files:  CHANGELOG.md
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Messaging, Server, Client, Encoding, API
+  build-depends:       base >=4.12 && <5,
+                       cryptonite >=0.26 && <0.27,
+                       commander-cli >=0.4 && <0.5,
+                       binary >=0.8 && < 0.9,
+                       bytestring,
+                       time,
+                       servant-server >=0.17,
+                       servant,
+                       transformers >=0.5 && <0.6,
+                       stm >=2.5,
+                       containers,
+                       warp,
+                       commander-cli >= 0.4.0.1,
+                       servant-client >= 0.17,
+                       http-client
+
+executable server
+  main-is:             server.hs
+  -- other-modules:
+  -- other-extensions:
+  build-depends:       base >=4.12 && <5,
+                       encrypted-messaging
+  hs-source-dirs:      app
+  default-language:    Haskell2010
+
+executable client
+  main-is:             client.hs
+  -- other-modules:
+  hs-source-dirs:      app
+  build-depends:       base >=4.12 && <5,
+                       encrypted-messaging
+  -- hs-source-dirs:
+  default-language:    Haskell2010
+
+test-suite messaging-test
+  main-is:             Main.hs
+  hs-source-dirs:      test
+  build-depends:       base >=4.12 && <5,
+                       file-path-th >=0.1 && <0.2,
+                       binary >=0.8 && <0.9,
+                       bytestring,
+                       encrypted-messaging
+  type:                exitcode-stdio-1.0
