@@ -31,7 +31,8 @@ library
                        warp,
                        commander-cli >= 0.4.0.1,
                        servant-client >= 0.17,
-                       http-client
+                       http-client,
+                       wai-extra
 
 executable server
   main-is:             server.hs

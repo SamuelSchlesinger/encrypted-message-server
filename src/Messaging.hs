@@ -31,15 +31,15 @@ import Control.Monad.Trans.Maybe (MaybeT(MaybeT, runMaybeT))
 import Encoding
 
 newtype PrivateKey = PrivateKey { unPrivateKey :: RSA.PrivateKey }
-  deriving newtype (Eq)
+  deriving newtype (Eq, Show, Read)
   deriving (ToByteString, FromByteString) via BinaryNewtype PrivateKey
 
 newtype PublicKey = PublicKey { unPublicKey :: RSA.PublicKey }
-  deriving newtype (Eq)
+  deriving newtype (Eq, Show, Read)
   deriving (ToByteString, FromByteString) via BinaryNewtype PublicKey
 
 instance Binary.Binary PrivateKey where
-  put (PrivateKey RSA.PrivateKey{..}) = do
+  put (PrivateKey (RSA.PrivateKey private_pub private_d private_p private_q private_dP private_dQ private_qinv)) = do
     Binary.put (PublicKey private_pub)
     Binary.put private_d
     Binary.put private_p
@@ -47,34 +47,45 @@ instance Binary.Binary PrivateKey where
     Binary.put private_dP
     Binary.put private_dQ
     Binary.put private_qinv
-  get = PrivateKey <$> (RSA.PrivateKey <$> (unPublicKey <$> Binary.get) <*> Binary.get <*> Binary.get <*> Binary.get <*> Binary.get <*> Binary.get <*> Binary.get)
+  get = PrivateKey <$>
+    (RSA.PrivateKey 
+      <$> (unPublicKey <$> Binary.get) 
+      <*> Binary.get
+      <*> Binary.get
+      <*> Binary.get
+      <*> Binary.get
+      <*> Binary.get
+      <*> Binary.get
+    )
 
 instance Binary.Binary PublicKey where
   put (PublicKey RSA.PublicKey{..}) = do
     Binary.put public_size
     Binary.put public_n
     Binary.put public_e
-  get = PublicKey <$> (RSA.PublicKey <$> Binary.get <*> Binary.get <*> Binary.get)
-
-generateKeypair :: IO (PublicKey, PrivateKey)
-generateKeypair = coerce <$> RSA.generate 4098 0x10001
+  get = PublicKey
+    <$> (RSA.PublicKey
+      <$> Binary.get
+      <*> Binary.get
+      <*> Binary.get
+        )
 
 data Signed a = Signed
   { signedBy :: PublicKey
   , signature :: SBS.ByteString
   , thing :: a }
-  deriving stock GHC.Generics.Generic
+  deriving stock (GHC.Generics.Generic, Show, Read)
   deriving anyclass Binary.Binary
 
 data Message a = Message
   { encryptedFor :: PublicKey
-  , encrypted :: Encrypted (Signed a) }
-  deriving stock GHC.Generics.Generic
+  , encrypted :: Signed (Encrypted a) }
+  deriving stock (GHC.Generics.Generic, Show, Read)
   deriving anyclass Binary.Binary
 
 data MessageResponse = MessageResponse
   { serverPublicKey :: PublicKey }
-  deriving stock GHC.Generics.Generic
+  deriving stock (GHC.Generics.Generic, Show, Read)
   deriving anyclass Binary.Binary
 
 deriving via (BinaryNewtype (Message a)) instance Binary.Binary a => ToByteString (Message a)
@@ -88,19 +99,16 @@ deriving via (BinaryNewtype (Encrypted a)) instance Binary.Binary a => FromByteS
 deriving via (BinaryNewtype MessageResponse) instance FromByteString MessageResponse
 
 newtype Encrypted a = Encrypted { unsafeUnDecrypted :: SBS.ByteString }
-  deriving newtype (Binary.Binary)
+  deriving newtype (Binary.Binary, Show, Read)
 
 writeTo :: (Binary.Binary a) => PrivateKey -> PublicKey -> a -> IO (Maybe (Message a))
 writeTo privateKey publicKey a = runMaybeT do
-  signed <- MaybeT (sign privateKey a)
-  encrypted <- MaybeT (encrypt publicKey signed)
-  pure (Message publicKey encrypted)
+  encrypted <- MaybeT (encrypt publicKey a)
+  signed <- MaybeT (sign privateKey encrypted)
+  pure (Message publicKey signed)
 
-readMessage :: Binary.Binary a => PrivateKey -> Message a -> Maybe a
-readMessage privateKey message =
-  if publicOfPrivate privateKey == encryptedFor message
-    then verify =<< decrypt privateKey (encrypted message)
-    else Nothing
+readMessage :: (FromByteString a, Binary.Binary a) => PrivateKey -> Message a -> Maybe a
+readMessage privateKey message = decrypt privateKey =<< verify (encrypted message)
   
 publicOfPrivate :: PrivateKey -> PublicKey
 publicOfPrivate (PrivateKey privateKey) = coerce $ RSA.private_pub privateKey
@@ -139,3 +147,6 @@ verify signed =
   & \case
       True -> Just $ thing signed
       False -> Nothing
+
+generateKeypair :: IO (PublicKey, PrivateKey)
+generateKeypair = coerce <$> RSA.generate 2048 0x10001

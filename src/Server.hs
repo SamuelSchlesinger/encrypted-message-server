@@ -14,6 +14,7 @@ import qualified Data.Map as Map
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Network.Wai.Handler.Warp (run)
 import Control.Monad.IO.Class
+import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 
 
 server
@@ -36,4 +37,4 @@ main :: IO ()
 main = do
   (publicKey, privateKey) <- generateKeypair
   t <- newTVarIO []
-  run 8080 (serve (Proxy @ServiceAPI) $ server privateKey publicKey t)
+  run 8080 (logStdoutDev $ serve (Proxy @ServiceAPI) $ server privateKey publicKey t)
