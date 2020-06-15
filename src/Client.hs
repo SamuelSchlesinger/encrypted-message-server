@@ -5,6 +5,8 @@
 {-# LANGUAGE DataKinds #-}
 module Client where
 
+import System.Environment (getEnv)
+import qualified Data.Binary as Binary
 import Data.Maybe (catMaybes)
 import Control.Monad
 import API (ServiceAPI)
@@ -28,16 +30,18 @@ receive :: UTCTime -> ClientM [Message SBS.ByteString]
 
 send' :: PrivateKey -> PublicKey -> SBS.ByteString -> IO MessageResponse
 send' privateKey publicKey contents = do
+  host <- getEnv "ENCRYPTED_SERVER_HOST"
   Just message <- (privateKey `writeTo` publicKey) contents
   manager <- newManager defaultManagerSettings
-  let clientEnv = mkClientEnv manager (BaseUrl Http "localhost" 8080 "")
+  let clientEnv = mkClientEnv manager (BaseUrl Http host 8080 "")
   Right a <- runClientM (send message) clientEnv
   pure a
 
 receive' :: PrivateKey -> Integer -> IO [Message SBS.ByteString]
 receive' privateKey daysBack = do
+  host <- getEnv "ENCRYPTED_SERVER_HOST"
   manager <- newManager defaultManagerSettings
-  let clientEnv = mkClientEnv manager (BaseUrl Http "localhost" 8080 "")
+  let clientEnv = mkClientEnv manager (BaseUrl Http host 8080 "")
   UTCTime (ModifiedJulianDay julianDay) _ <- getCurrentTime
   let fromThisTime = UTCTime (ModifiedJulianDay (julianDay - daysBack)) 0
   Right a <- runClientM (receive fromThisTime) clientEnv
@@ -65,8 +69,10 @@ main =  command_ . toplevel @"client" $
   where
     sendMessage :: SBS.ByteString -> IO ()
     sendMessage msg = do
-      privateKey <- decodeFile "sam.private"
-      publicKey <- decodeFile "sam.public"
+      privateKeyFile <- getEnv "PRIVATE_KEY"
+      publicKeyFile <- getEnv "PUBLIC_KEY"
+      privateKey <- decodeFile privateKeyFile
+      publicKey <- decodeFile publicKeyFile
       print =<< send' privateKey publicKey msg
     receiveMessages :: Integer -> IO ()
     receiveMessages daysBack = do

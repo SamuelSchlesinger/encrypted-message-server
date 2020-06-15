@@ -5,6 +5,8 @@ module Server where
 
 import Messaging
 import API
+
+import qualified Data.Binary as Binary
 import Servant
 import qualified Data.ByteString as SBS
 import Control.Concurrent.STM
@@ -15,7 +17,7 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Network.Wai.Handler.Warp (run)
 import Control.Monad.IO.Class
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-
+import System.Environment (getEnv)
 
 server
   :: PrivateKey
@@ -35,6 +37,9 @@ server privateKey publicKey t = recordMessage :<|> retrieveMessages where
 
 main :: IO ()
 main = do
-  (publicKey, privateKey) <- generateKeypair
+  publicKeyFile <- getEnv "PUBLIC_KEY"
+  privateKeyFile <- getEnv "PRIVATE_KEY"
+  publicKey <- Binary.decodeFile publicKeyFile
+  privateKey <- Binary.decodeFile privateKeyFile
   t <- newTVarIO []
   run 8080 (logStdoutDev $ serve (Proxy @ServiceAPI) $ server privateKey publicKey t)
