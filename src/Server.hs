@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BlockArguments #-}
@@ -6,6 +7,7 @@ module Server where
 import Messaging
 import API
 
+import Data.Maybe (isJust)
 import qualified Data.Binary as Binary
 import Servant
 import qualified Data.ByteString as SBS
@@ -28,12 +30,15 @@ server privateKey publicKey t = recordMessage :<|> retrieveMessages where
   retrieveMessages lastTime = do
     messages <- liftIO $ atomically (readTVar t)
     pure (map snd . filter ((>= lastTime) . fst) $ messages)
-  recordMessage message = do
-    now <- liftIO $ getCurrentTime
-    liftIO $ atomically do
-      messages <- readTVar t
-      writeTVar t ((now, message) : messages)
-      pure $ MessageResponse { serverPublicKey = publicKey }
+  recordMessage message = if (isJust $ verify (encrypted message))
+    then do
+      now <- liftIO $ getCurrentTime
+      liftIO $ atomically do
+        messages <- readTVar t
+        writeTVar t ((now, message) : messages)
+        pure $ MessageResponse { serverPublicKey = publicKey }
+    else do
+      throwError err403
 
 main :: IO ()
 main = do
