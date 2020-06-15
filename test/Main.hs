@@ -1,31 +1,40 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Main where
 
 import Control.Monad (forM_)
 
 import System.FilePath.TH (fileRelativeToAbsolute)
-import qualified Data.ByteString as BS
+import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Char8 as BS8
-import Messaging (encodeAndSignMessage, decodeAndVerifyMessage, generateKeypair, unPublicKeyFile, unPrivateKeyFile)
+import Messaging
 import Data.Binary (decodeFile)
 
 main :: IO ()
 main = do
   let keysPath = $(fileRelativeToAbsolute "keys")
-  bobPublicKey <- unPublicKeyFile <$> decodeFile (keysPath <> "/bob.public")
-  bobPrivateKey <- unPrivateKeyFile <$> decodeFile (keysPath <> "/bob.private")
-  alicePublicKey <- unPublicKeyFile <$> decodeFile (keysPath <> "/alice.public")
-  alicePrivateKey <- unPrivateKeyFile <$> decodeFile (keysPath <> "/alice.private")
-  evePublicKey <- unPublicKeyFile <$> decodeFile (keysPath <> "/eve.public")
-  evePrivateKey <- unPrivateKeyFile <$> decodeFile (keysPath <> "/eve.private")
+  bobPublicKey <- decodeFile (keysPath <> "/bob.public")
+  bobPrivateKey <- decodeFile (keysPath <> "/bob.private")
+  alicePublicKey <- decodeFile (keysPath <> "/alice.public")
+  alicePrivateKey <- decodeFile (keysPath <> "/alice.private")
+  evePrivateKey <- decodeFile (keysPath <> "/eve.private")
   forM_ messages $ \x -> do
-    Just encodedMsg <- encodeAndSignMessage bobPrivateKey alicePublicKey (show x)
-    let Nothing = decodeAndVerifyMessage evePrivateKey bobPublicKey (BSL.toStrict encodedMsg)
-    let Just decodedMsg = decodeAndVerifyMessage alicePrivateKey bobPublicKey (BSL.toStrict encodedMsg)
-    if show x == decodedMsg then pure () else error "Decoding failed"
 
-messages :: [String]
+    Just encrypted <- encrypt bobPublicKey x
+    let Just decrypted = decrypt bobPrivateKey encrypted
+    if x == decrypted then pure () else error "Decrypting failed"
+
+    Just signed <- sign bobPrivateKey encrypted
+    let Just verified = verify signed
+    if verified == encrypted then pure () else error "Verifying failed"
+
+    Just msg <- (bobPrivateKey `writeTo` alicePublicKey) x
+    let Nothing = readMessage evePrivateKey msg
+    let Just decodedMsg = readMessage alicePrivateKey msg
+    if x == decodedMsg then pure () else error "Decoding failed"
+
+messages :: [SBS.ByteString]
 messages =
   ["Hello, this is Sam",
    "Pow chicka wow wow",
@@ -39,4 +48,4 @@ messages =
    \than long. We can really get going on this, make a real long message. Get \
    \yourself to long-town, bruski.",
    "",
-   take 1850 $ repeat ' ']
+   BS8.pack $ take 1850 $ repeat ' ']

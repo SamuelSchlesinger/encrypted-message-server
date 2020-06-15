@@ -32,11 +32,9 @@ import Encoding
 
 newtype PrivateKey = PrivateKey { unPrivateKey :: RSA.PrivateKey }
   deriving newtype (Eq, Show, Read)
-  deriving (ToByteString, FromByteString) via BinaryNewtype PrivateKey
 
 newtype PublicKey = PublicKey { unPublicKey :: RSA.PublicKey }
   deriving newtype (Eq, Show, Read)
-  deriving (ToByteString, FromByteString) via BinaryNewtype PublicKey
 
 instance Binary.Binary PrivateKey where
   put (PrivateKey (RSA.PrivateKey private_pub private_d private_p private_q private_dP private_dQ private_qinv)) = do
@@ -74,32 +72,22 @@ data Signed a = Signed
   { signedBy :: PublicKey
   , signature :: SBS.ByteString
   , thing :: a }
-  deriving stock (GHC.Generics.Generic, Show, Read)
+  deriving stock (GHC.Generics.Generic, Show, Read, Eq)
   deriving anyclass Binary.Binary
 
 data Message a = Message
   { encryptedFor :: PublicKey
   , encrypted :: Signed (Encrypted a) }
-  deriving stock (GHC.Generics.Generic, Show, Read)
+  deriving stock (GHC.Generics.Generic, Show, Read, Eq)
   deriving anyclass Binary.Binary
 
 data MessageResponse = MessageResponse
   { serverPublicKey :: PublicKey }
-  deriving stock (GHC.Generics.Generic, Show, Read)
+  deriving stock (GHC.Generics.Generic, Show, Read, Eq)
   deriving anyclass Binary.Binary
 
-deriving via (BinaryNewtype (Message a)) instance Binary.Binary a => ToByteString (Message a)
-deriving via (BinaryNewtype (Signed a)) instance Binary.Binary a => ToByteString (Signed a)
-deriving via (BinaryNewtype (Encrypted a)) instance Binary.Binary a => ToByteString (Encrypted a)
-deriving via (BinaryNewtype MessageResponse) instance ToByteString MessageResponse
-
-deriving via (BinaryNewtype (Message a)) instance Binary.Binary a => FromByteString (Message a)
-deriving via (BinaryNewtype (Signed a)) instance Binary.Binary a => FromByteString (Signed a)
-deriving via (BinaryNewtype (Encrypted a)) instance Binary.Binary a => FromByteString (Encrypted a)
-deriving via (BinaryNewtype MessageResponse) instance FromByteString MessageResponse
-
 newtype Encrypted a = Encrypted { unsafeUnDecrypted :: SBS.ByteString }
-  deriving newtype (Binary.Binary, Show, Read)
+  deriving newtype (Binary.Binary, Show, Read, Eq)
 
 writeTo :: (Binary.Binary a) => PrivateKey -> PublicKey -> a -> IO (Maybe (Message a))
 writeTo privateKey publicKey a = runMaybeT do
@@ -107,16 +95,16 @@ writeTo privateKey publicKey a = runMaybeT do
   signed <- MaybeT (sign privateKey encrypted)
   pure (Message publicKey signed)
 
-readMessage :: (FromByteString a, Binary.Binary a) => PrivateKey -> Message a -> Maybe a
+readMessage :: (Binary.Binary a) => PrivateKey -> Message a -> Maybe a
 readMessage privateKey message = decrypt privateKey =<< verify (encrypted message)
   
 publicOfPrivate :: PrivateKey -> PublicKey
 publicOfPrivate (PrivateKey privateKey) = coerce $ RSA.private_pub privateKey
 
-decrypt :: (Binary.Binary a, FromByteString a) => PrivateKey -> Encrypted a -> Maybe a
+decrypt :: (Binary.Binary a) => PrivateKey -> Encrypted a -> Maybe a
 decrypt (PrivateKey privateKey) (Encrypted sbs) =
   either (const Nothing) 
-         (either (const Nothing) Just . fromByteString . LBS.fromStrict)
+         (either (const Nothing) (Just . \(_,_,x) -> x) . Binary.decodeOrFail . LBS.fromStrict)
   $ RSA.OAEP.decrypt Nothing (defaultOAEPParams SHA512) privateKey sbs
 
 encrypt :: (Binary.Binary a) => PublicKey -> a -> IO (Maybe (Encrypted a))
@@ -142,7 +130,7 @@ verify :: (Binary.Binary a) => Signed a -> Maybe a
 verify signed =
   RSA.PSS.verify (defaultPSSParams SHA512)  
                  (coerce $ signedBy signed)
-                 (LBS.toStrict $ Binary.encode signed)
+                 (LBS.toStrict $ Binary.encode (thing signed))
                  (signature signed)
   & \case
       True -> Just $ thing signed

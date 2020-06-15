@@ -26,10 +26,9 @@ send :<|> receive = client (Proxy @ServiceAPI)
 send :: Message SBS.ByteString -> ClientM MessageResponse
 receive :: UTCTime -> ClientM [Message SBS.ByteString]
 
-send' :: PrivateKey -> PublicKey -> String -> IO MessageResponse
+send' :: PrivateKey -> PublicKey -> SBS.ByteString -> IO MessageResponse
 send' privateKey publicKey contents = do
-  let bsContents = BS8.pack contents
-  Just message <- (privateKey `writeTo` publicKey) bsContents
+  Just message <- (privateKey `writeTo` publicKey) contents
   manager <- newManager defaultManagerSettings
   let clientEnv = mkClientEnv manager (BaseUrl Http "localhost" 8080 "")
   Right a <- runClientM (send message) clientEnv
@@ -42,18 +41,17 @@ receive' privateKey daysBack = do
   UTCTime (ModifiedJulianDay julianDay) _ <- getCurrentTime
   let fromThisTime = UTCTime (ModifiedJulianDay (julianDay - daysBack)) 0
   Right a <- runClientM (receive fromThisTime) clientEnv
-  print (length a)
   pure a
 
 decryptAndDisplay :: PrivateKey -> [Message SBS.ByteString] -> IO ()
 decryptAndDisplay privateKey messages = do
   forM_ messages \msg -> do
-    let msg' = BS8.unpack <$> readMessage privateKey msg
-    maybe (pure ()) putStrLn $ msg'
+    let msg' = readMessage privateKey msg
+    maybe (pure ()) BS8.putStrLn $ msg'
 
 main :: IO ()
 main =  command_ . toplevel @"client" $
-  (sub @"writes" $ arg @"message" @String $ \message -> raw $ sendMessage message
+  (sub @"writes" $ arg @"message" @SBS.ByteString $ \message -> raw $ sendMessage message
   )
   <+>
   (sub @"receive" $ arg @"days-back" @Integer $ \t -> raw $ receiveMessages t
@@ -65,7 +63,7 @@ main =  command_ . toplevel @"client" $
     encodeFile "sam.public" publicKey
   )
   where
-    sendMessage :: String -> IO ()
+    sendMessage :: SBS.ByteString -> IO ()
     sendMessage msg = do
       privateKey <- decodeFile "sam.private"
       publicKey <- decodeFile "sam.public"
