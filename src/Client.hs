@@ -55,26 +55,30 @@ decryptAndDisplay privateKey messages = do
 
 main :: IO ()
 main =  command_ . toplevel @"client" $
-  (sub @"writes" $ arg @"message" @SBS.ByteString $ \message -> raw $ sendMessage message
+  (sub @"writes" $ arg @"message" @SBS.ByteString 
+                 $ \message -> 
+                 sub @"to"
+                   $ arg @"homie" @SBS.ByteString $ \homie -> raw $ sendMessage homie message
   )
   <+>
   (sub @"receive" $ arg @"days-back" @Integer $ \t -> raw $ receiveMessages t
   )
   <+>
-  (sub @"keygen" $ raw $ do
+  (sub @"keygen" $ arg @"name" @SBS.ByteString $ \name -> raw $ do
     (publicKey, privateKey) <- generateKeypair
-    encodeFile "sam.private" privateKey
-    encodeFile "sam.public" publicKey
+    encodeFile (BS8.unpack name <> ".private") privateKey
+    encodeFile (BS8.unpack name <> ".public") publicKey
   )
   where
-    sendMessage :: SBS.ByteString -> IO ()
-    sendMessage msg = do
+    sendMessage :: SBS.ByteString -> SBS.ByteString -> IO ()
+    sendMessage homie msg = do
       privateKeyFile <- getEnv "PRIVATE_KEY"
       publicKeyFile <- getEnv "PUBLIC_KEY"
+      homiePublicKey <- decodeFile (BS8.unpack homie)
       privateKey <- decodeFile privateKeyFile
-      publicKey <- decodeFile publicKeyFile
-      print =<< send' privateKey publicKey msg
+      print =<< send' privateKey homiePublicKey msg
     receiveMessages :: Integer -> IO ()
     receiveMessages daysBack = do
-      privateKey <- decodeFile "sam.private"
+      privateKeyFile <- getEnv "PRIVATE_KEY"
+      privateKey <- decodeFile privateKeyFile
       receive' privateKey daysBack >>= decryptAndDisplay privateKey
